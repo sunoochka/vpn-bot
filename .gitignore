@@ -1,2 +1,3 @@
 storage/
 config/local.yaml
+!internal/storage
