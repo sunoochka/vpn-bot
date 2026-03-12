@@ -160,10 +160,14 @@ func (m *Manager) RemoveUser(uuid string) error {
 }
 
 func (m *Manager) Reload() error {
+    log.Println("Reloading Xray...")
 
-	log.Println("Reloading Xray...")
-
-	cmd := exec.Command("sudo", "systemctl", "reload", "xray")
-
-	return cmd.Run()
+    cmdTest := exec.Command("xray", "-c", m.ConfigPath, "configtest")
+    if err := cmdTest.Run(); err != nil {
+        log.Println("Xray config invalid, не перезагружено:", err)
+        return err
+    }
+	
+    cmd := exec.Command("sudo", "systemctl", "restart", "xray")
+    return cmd.Run()
 }
