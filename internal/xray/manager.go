@@ -45,7 +45,7 @@ func (m *Manager) saveConfig(cfg map[string]interface{}) error {
 		return err
 	}
 
-	return os.WriteFile(m.ConfigPath, data, 0644)
+	return os.WriteFile(m.ConfigPath, data, XrayConfigPermissions)
 }
 
 func (m *Manager) backupConfig() error {
@@ -119,8 +119,10 @@ func (m *Manager) AddUser(uuid string) error {
 
 		clients = append(clients, newClient)
 		settings["clients"] = clients
+		cfg["inbounds"] = inbounds
 
 		log.Println("User added to Xray config:", uuid)
+		break
 	}
 
 	m.backupConfig()
@@ -147,20 +149,38 @@ func (m *Manager) RemoveUser(uuid string) error {
 
 	for _, inbound := range inbounds {
 
-		ib := inbound.(map[string]interface{})
+		ib, ok := inbound.(map[string]interface{})
+		if !ok {
+			continue
+		}
 
 		if ib["tag"] != "vless" {
 			continue
 		}
 
-		settings := ib["settings"].(map[string]interface{})
-		clients := settings["clients"].([]interface{})
+		settings, ok := ib["settings"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		clientsRaw, ok := settings["clients"]
+		if !ok {
+			continue
+		}
+
+		clients, ok := clientsRaw.([]interface{})
+		if !ok {
+			continue
+		}
 
 		var newClients []interface{}
 
 		for _, c := range clients {
 
-			client := c.(map[string]interface{})
+			client, ok := c.(map[string]interface{})
+			if !ok {
+				continue
+			}
 
 			if client["id"] != uuid {
 				newClients = append(newClients, client)
@@ -168,8 +188,10 @@ func (m *Manager) RemoveUser(uuid string) error {
 		}
 
 		settings["clients"] = newClients
+		cfg["inbounds"] = inbounds
 
 		log.Println("User removed from Xray config:", uuid)
+		break
 	}
 
 	m.backupConfig()
