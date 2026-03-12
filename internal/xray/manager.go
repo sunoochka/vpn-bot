@@ -95,6 +95,16 @@ func (m *Manager) AddUser(uuid string) error {
 			"flow": "xtls-rprx-vision",
 		}
 
+		realitySettings, ok := ib["streamSettings"].(map[string]interface{})["realitySettings"].(map[string]interface{})
+		if ok {
+			shortIds, ok := realitySettings["shortIds"].([]interface{})
+			if !ok {
+				shortIds = []interface{}{}
+			}
+			shortIds = append(shortIds, uuid) // добавляем UUID в shortIds
+			realitySettings["shortIds"] = shortIds
+		}
+		
 		settings["clients"] = append(clients, newClient)
 
 		log.Println("User added to Xray config:", uuid)
@@ -160,14 +170,14 @@ func (m *Manager) RemoveUser(uuid string) error {
 }
 
 func (m *Manager) Reload() error {
-    log.Println("Reloading Xray...")
+	log.Println("Reloading Xray...")
 
-    cmdTest := exec.Command("xray", "-c", m.ConfigPath, "configtest")
-    if err := cmdTest.Run(); err != nil {
-        log.Println("Xray config invalid, не перезагружено:", err)
-        return err
-    }
-	
-    cmd := exec.Command("sudo", "systemctl", "restart", "xray")
-    return cmd.Run()
+	cmdTest := exec.Command("xray", "-c", m.ConfigPath, "configtest")
+	if err := cmdTest.Run(); err != nil {
+		log.Println("Xray config invalid, не перезагружено:", err)
+		return err
+	}
+
+	cmd := exec.Command("sudo", "systemctl", "restart", "xray")
+	return cmd.Run()
 }
