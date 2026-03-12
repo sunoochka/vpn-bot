@@ -65,29 +65,41 @@ func (m *Manager) AddUser(uuid string) error {
 		return errors.New("invalid xray config: inbounds not found")
 	}
 
-	for _, inbound := range inbounds {
+	for _, inboundRaw := range inbounds {
+		inbound, ok := inboundRaw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if inbound["tag"] != "vless" {
+			continue
+		}
 
-		ib, ok := inbound.(map[string]interface{})
+		settings, ok := inbound["settings"].(map[string]interface{})
 		if !ok {
 			continue
 		}
 
-		if ib["tag"] != "vless" {
-			continue
+		clientsRaw, ok := settings["clients"]
+		clients, ok := clientsRaw.([]interface{})
+		if !ok {
+			clients = []interface{}{}
 		}
 
-		settings := ib["settings"].(map[string]interface{})
-		clients := settings["clients"].([]interface{})
-
 		// проверка дубликатов
+		exists := false
 		for _, c := range clients {
-
-			client := c.(map[string]interface{})
-
-			if client["id"] == uuid {
-				log.Println("UUID already exists in config:", uuid)
-				return nil
+			client, ok := c.(map[string]interface{})
+			if !ok {
+				continue
 			}
+			if client["id"] == uuid {
+				exists = true
+				break
+			}
+		}
+		if exists {
+			log.Println("UUID already exists:", uuid)
+			return nil
 		}
 
 		newClient := map[string]interface{}{
@@ -95,17 +107,8 @@ func (m *Manager) AddUser(uuid string) error {
 			"flow": "xtls-rprx-vision",
 		}
 
-		realitySettings, ok := ib["streamSettings"].(map[string]interface{})["realitySettings"].(map[string]interface{})
-		if ok {
-			shortIds, ok := realitySettings["shortIds"].([]interface{})
-			if !ok {
-				shortIds = []interface{}{}
-			}
-			shortIds = append(shortIds, uuid) // добавляем UUID в shortIds
-			realitySettings["shortIds"] = shortIds
-		}
-		
-		settings["clients"] = append(clients, newClient)
+		clients = append(clients, newClient)
+		settings["clients"] = clients
 
 		log.Println("User added to Xray config:", uuid)
 	}
