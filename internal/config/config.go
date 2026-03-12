@@ -9,12 +9,23 @@ import (
 
 type Config struct {
 	Env string `yaml:"env" env-default:"local"`
+
+	// path to the SQLite database file
 	StoragePath string `yaml:"storage_path" env-required:"true"`
+
+	// telegram bot token
 	TelegramToken string  `yaml:"telegram_token" env-required:"true"`
+
+	// values used to build VPN keys
 	ServerIP string `yaml:"server_ip" env-required:"true"`
 	PublicKey string `yaml:"public_key" env-required:"true"`
 	ShortID string `yaml:"short_id" env-required:"true"`
 	SNI string `yaml:"sni" env-required:"true"`
+
+	// path to the xray JSON configuration file; during development this
+	// file may not actually exist, but the field is required for
+	// dependency injection.
+	XrayConfigPath string `yaml:"xray_config_path" env-required:"true"`
 }
 
 func MustLoad() *Config {

@@ -13,15 +13,18 @@ type Config struct {
 }
 
 func GenerateKey(uuid string, cfg Config) string {
-
-	if cfg.PublicKey == "" {
-		log.Println("WARNING: PublicKey is empty!")
+	// basic sanity checks so that we don't accidentally generate a
+	// malformed link. In a production system you would probably validate
+	// the values when the configuration is read instead of every time a
+	// key is generated, but this is cheap and helps catch mistakes early.
+	if cfg.ServerIP == "" || cfg.PublicKey == "" || cfg.ShortID == "" {
+		log.Printf("[vpn] incomplete vpn config: %+v", cfg)
 	}
 	if len(cfg.PublicKey) != 44 {
-		log.Printf("WARNING: PublicKey has incorrect length: %d (expected 44)\n", len(cfg.PublicKey))
+		log.Printf("[vpn] WARNING: PublicKey has incorrect length: %d (expected 44)", len(cfg.PublicKey))
 	}
 
-	return fmt.Sprintf(
+	key := fmt.Sprintf(
 		"vless://%s@%s:443?encryption=none&security=reality&sni=%s&fp=chrome&pbk=%s&sid=%s&type=tcp&flow=xtls-rprx-vision#SunaVPN",
 		uuid,
 		cfg.ServerIP,
@@ -29,4 +32,6 @@ func GenerateKey(uuid string, cfg Config) string {
 		cfg.PublicKey,
 		cfg.ShortID,
 	)
+	log.Printf("[event] vpn key generated for uuid %s", uuid)
+	return key
 }

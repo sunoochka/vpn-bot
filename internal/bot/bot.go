@@ -15,12 +15,13 @@ type Bot struct {
 	api       *tgbotapi.BotAPI
 	userSrv   *service.UserService
 	vpnConfig vpn.Config
-	xray *xray.Manager
+	// xray manager may still be kept for future admin commands but the
+	// service already handles adding users so handlers shouldn't call it
+	// directly.
+	xray xray.ManagerInterface
 }
 
-func New(token string, userSrv *service.UserService, vpnCfg vpn.Config) (*Bot, error) {
-	xrayManager := xray.NewManager("/usr/local/etc/xray/config.json")
-
+func New(token string, userSrv *service.UserService, vpnCfg vpn.Config, xrayMgr xray.ManagerInterface) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, err
@@ -30,7 +31,7 @@ func New(token string, userSrv *service.UserService, vpnCfg vpn.Config) (*Bot, e
 		api:       api,
 		userSrv:   userSrv,
 		vpnConfig: vpnCfg,
-		xray: xrayManager,
+		xray:      xrayMgr,
 	}, nil
 }
 
@@ -76,13 +77,6 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) {
 	var text string
 
 	if isNew {
-		err := b.xray.AddUser(user.UUID)
-		if err != nil {
-			log.Println("Ошибка при добавлении пользователя в Xray:", err)
-			b.reply(msg.Chat.ID, "Ошибка при настройке VPN. Пожалуйста, попробуйте позже.")
-			return
-		}
-
 		text = "🎉 Добро пожаловать!\n\n" +
 			"Вам выдано 3 дня бесплатного VPN.\n\n" +
 			"Ваш ключ:\n\n" + key
@@ -122,18 +116,22 @@ func (b *Bot) handleProfile(msg *tgbotapi.Message) {
 		}
 	}
 
+	key := vpn.GenerateKey(user.UUID, b.vpnConfig)
+
 	text := fmt.Sprintf(
 		"👤 Ваш профиль\n\n"+
-			"🆔Идентификатор: %d\n"+
-			"💰Баланс: %d ₽\n"+
-			"📲Устройств: %d\n\n"+
-			"📅Дата окончания:\n%v\n"+
-			"Осталось: %d дней",
+		"🆔Идентификатор: %d\n"+
+		"💰Баланс: %d ₽\n"+
+		"📲Устройств: %d\n\n"+
+		"📅Дата окончания:\n%v\n"+
+		"Осталось: %d дней\n\n"+
+		"🔑Ваш VPN ключ:\n%s",
 		user.TelegramID,
 		user.Balance,
 		user.Devices,
 		subText,
 		days+1,
+		key,
 	)
 	b.reply(msg.Chat.ID, text)
 }
@@ -149,3 +147,4 @@ func (b *Bot) reply(chatID int64, text string) {
 		log.Println("Ошибка при отправке сообщения:", err)
 	}
 }
+
