@@ -6,6 +6,7 @@ import (
 	"time"
 	"vpn-bot/internal/service"
 	"vpn-bot/internal/vpn"
+	"vpn-bot/internal/xray"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -14,9 +15,12 @@ type Bot struct {
 	api       *tgbotapi.BotAPI
 	userSrv   *service.UserService
 	vpnConfig vpn.Config
+	xray *xray.Manager
 }
 
 func New(token string, userSrv *service.UserService, vpnCfg vpn.Config) (*Bot, error) {
+	xrayManager := xray.NewManager("/usr/local/etc/xray/config.json")
+
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, err
@@ -26,6 +30,7 @@ func New(token string, userSrv *service.UserService, vpnCfg vpn.Config) (*Bot, e
 		api:       api,
 		userSrv:   userSrv,
 		vpnConfig: vpnCfg,
+		xray: xrayManager,
 	}, nil
 }
 
@@ -71,6 +76,13 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) {
 	var text string
 
 	if isNew {
+		err := b.xray.AddUser(user.UUID)
+		if err != nil {
+			log.Println("Ошибка при добавлении пользователя в Xray:", err)
+			b.reply(msg.Chat.ID, "Ошибка при настройке VPN. Пожалуйста, попробуйте позже.")
+			return
+		}
+
 		text = "🎉 Добро пожаловать!\n\n" +
 			"Вам выдано 3 дня бесплатного VPN.\n\n" +
 			"Ваш ключ:\n\n" + key
