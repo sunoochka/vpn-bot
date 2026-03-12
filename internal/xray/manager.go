@@ -2,6 +2,7 @@ package xray
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"os/exec"
 )
@@ -42,6 +43,7 @@ func (m *Manager) saveConfig(cfg *Config) error {
 }
 
 func (m *Manager) AddUser(uuid string) error {
+	log.Println("Adding user to Xray:", uuid)
 
 	cfg, err := m.loadConfig()
 	if err != nil {
@@ -64,6 +66,8 @@ func (m *Manager) AddUser(uuid string) error {
 	if err != nil {
 		return err
 	}
+
+	log.Println("User added to Xray:", uuid)
 
 	return m.Reload()
 }
@@ -103,6 +107,8 @@ func (m *Manager) RemoveUser(uuid string) error {
 }
 
 func (m *Manager) Reload() error {
+
+	log.Println("Reloading Xray...")
 
 	cmd := exec.Command("sudo", "systemctl", "reload", "xray")
 
