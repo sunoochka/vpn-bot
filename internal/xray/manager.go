@@ -3,13 +3,18 @@ package xray
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
+	"sync"
 )
+
+const XrayConfigPermissions = 0600
 
 type Manager struct {
 	ConfigPath string
+	mu         sync.RWMutex
 }
 
 func NewManager(configPath string) *Manager {
@@ -43,14 +48,19 @@ func (m *Manager) saveConfig(cfg map[string]interface{}) error {
 	return os.WriteFile(m.ConfigPath, data, 0644)
 }
 
-func (m *Manager) backupConfig() {
+func (m *Manager) backupConfig() error {
 
 	data, err := os.ReadFile(m.ConfigPath)
 	if err != nil {
-		return
+		return fmt.Errorf("failed to read config for backup: %w", err)
 	}
 
-	_ = os.WriteFile(m.ConfigPath+".bak", data, 0644)
+	if err := os.WriteFile(m.ConfigPath+".bak", data, XrayConfigPermissions); err != nil {
+		return fmt.Errorf("failed to write backup: %w", err)
+	}
+
+	log.Println("Config backed up successfully")
+	return nil
 }
 
 func (m *Manager) AddUser(uuid string) error {
