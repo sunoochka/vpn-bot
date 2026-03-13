@@ -131,6 +131,10 @@ func isUniqueConstraintError(err error) bool {
 // the VPN configuration. This method is not currently used by the bot but
 // will be handy when implementing subscription expiration or admin
 // commands.
+// RemoveUser deletes the user record and removes the associated UUID from
+// the VPN configuration. This method is not currently used by the bot but
+// will be handy when implementing subscription expiration or admin
+// commands.
 func (s *UserService) RemoveUser(tgID int64, uuid string) error {
 	// simple sequence: delete from storage then remove from xray. If the
 	// second step fails we log and return the error; the database entry is
@@ -143,6 +147,64 @@ func (s *UserService) RemoveUser(tgID int64, uuid string) error {
 		return err
 	}
 	logEvent("user removed", tgID)
+	return nil
+}
+
+// ProcessPayment increases a user's balance by the given amount and
+// recalculates the subscription expiration. After updating the database
+// it ensures the user is present in the VPN configuration (restoring
+// access if necessary). It logs both payment received and subscription
+// activation events.
+func (s *UserService) ProcessPayment(tgID int64, amount int) (*models.User, error) {
+	user, err := s.Repo.GetUser(tgID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, errors.New("user not found")
+	}
+
+	user.Balance += amount
+	user.SubUntil = CalculateSubUntil(user.Balance)
+
+	if err := s.Repo.UpdateUser(user); err != nil {
+		return nil, err
+	}
+
+	// ensure VPN access is active (add client even if already present)
+	if err := s.Xray.AddClient(user.UUID); err != nil {
+		logEvent("xray add after payment failed", user.UUID)
+		return nil, err
+	}
+
+	logEvent("payment received", map[string]interface{}{ "tg_id": tgID, "amount": amount })
+	logEvent("subscription activated", tgID)
+	return user, nil
+}
+
+// CheckExpirations looks for users whose subscription has expired and
+// disables their VPN access. The operation updates each affected user's
+// SubUntil to zero so that the same user is not processed repeatedly.
+// The method is safe to call periodically from a background goroutine.
+func (s *UserService) CheckExpirations() error {
+	now := time.Now().Unix()
+	users, err := s.Repo.ListExpired(now)
+	if err != nil {
+		return err
+	}
+	for _, u := range users {
+		// remove from xray and clear subscription
+		if err := s.Xray.RemoveClient(u.UUID); err != nil {
+			logEvent("xray remove during expiration failed", u.UUID)
+			// don't abort; continue with other users
+		}
+		// update subuntil so we don't log again
+		u.SubUntil = 0
+		if err := s.Repo.UpdateUser(u); err != nil {
+			logEvent("failed to update user after expiration", u.TelegramID)
+		}
+		logEvent("subscription expired", u.TelegramID)
+	}
 	return nil
 }
 

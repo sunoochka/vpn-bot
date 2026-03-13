@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"time"
 
 	"vpn-bot/internal/bot"
 	"vpn-bot/internal/config"
@@ -50,6 +51,21 @@ func main() {
 	}
 
 	log.Println("bot initialized")
+
+	// start expiration checker
+	interval, err := time.ParseDuration(cfg.ExpirationInterval)
+	if err != nil {
+		log.Fatalf("invalid expiration interval: %v", err)
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := userService.CheckExpirations(); err != nil {
+				log.Println("expiration check error:", err)
+			}
+		}
+	}()
 
 	b.Start()
 }

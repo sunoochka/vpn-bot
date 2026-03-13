@@ -26,6 +26,10 @@ type Config struct {
 	// file may not actually exist, but the field is required for
 	// dependency injection.
 	XrayConfigPath string `yaml:"xray_config_path" env-required:"true"`
+
+	// interval at which the background expiration checker runs. Accepts
+	// any duration string supported by time.ParseDuration (e.g. "5m").
+	ExpirationInterval string `yaml:"expiration_interval" env-default:"5m"`
 }
 
 func MustLoad() *Config {

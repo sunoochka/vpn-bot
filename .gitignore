@@ -3,3 +3,4 @@ config/local.yaml
 !internal/storage
 config.json
 xray_logs.txt
+docs/

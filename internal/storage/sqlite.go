@@ -114,6 +114,100 @@ func (s *Storage) DeleteUser(tgID int64) error {
 	return nil
 }
 
+func (s *Storage) UpdateUser(user *models.User) error {
+	const op = "storage.sqlite.UpdateUser"
+
+	query := `
+	UPDATE users
+	SET balance = ?, devices = ?, sub_until = ?, referrer_id = ?
+	WHERE telegram_id = ?;`
+	_, err := s.db.Exec(
+		query,
+		user.Balance,
+		user.Devices,
+		user.SubUntil,
+		user.ReferrerID,
+		user.TelegramID,
+	)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
+}
+
+func (s *Storage) ListExpired(now int64) ([]*models.User, error) {
+	const op = "storage.sqlite.ListExpired"
+
+	query := `
+	SELECT id, telegram_id, uuid, balance, devices, sub_until, referrer_id, created_at
+	FROM users
+	WHERE sub_until > 0 AND sub_until < ?;`
+
+	rows, err := s.db.Query(query, now)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	var users []*models.User
+	for rows.Next() {
+		var u models.User
+		if err := rows.Scan(
+			&u.ID,
+			&u.TelegramID,
+			&u.UUID,
+			&u.Balance,
+			&u.Devices,
+			&u.SubUntil,
+			&u.ReferrerID,
+			&u.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		users = append(users, &u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	return users, nil
+}
+
+func (s *Storage) GetAllUsers() ([]*models.User, error) {
+	const op = "storage.sqlite.GetAllUsers"
+
+	query := `
+	SELECT id, telegram_id, uuid, balance, devices, sub_until, referrer_id, created_at
+	FROM users;`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	var users []*models.User
+	for rows.Next() {
+		var u models.User
+		if err := rows.Scan(
+			&u.ID,
+			&u.TelegramID,
+			&u.UUID,
+			&u.Balance,
+			&u.Devices,
+			&u.SubUntil,
+			&u.ReferrerID,
+			&u.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		users = append(users, &u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	return users, nil
+}
+
 // RunInTx executes a series of repository operations within a single
 // SQLite transaction. If the passed function returns an error, the
 // transaction will be rolled back; otherwise it will be committed. The
@@ -192,6 +286,85 @@ func (t *txRepo) DeleteUser(tgID int64) error {
 	query := `DELETE FROM users WHERE telegram_id = ?;`
 	_, err := t.tx.Exec(query, tgID)
 	return err
+}
+
+func (t *txRepo) UpdateUser(user *models.User) error {
+	query := `
+	UPDATE users
+	SET balance = ?, devices = ?, sub_until = ?, referrer_id = ?
+	WHERE telegram_id = ?;`
+	_, err := t.tx.Exec(
+		query,
+		user.Balance,
+		user.Devices,
+		user.SubUntil,
+		user.ReferrerID,
+		user.TelegramID,
+	)
+	return err
+}
+
+func (t *txRepo) ListExpired(now int64) ([]*models.User, error) {
+	query := `
+	SELECT id, telegram_id, uuid, balance, devices, sub_until, referrer_id, created_at
+	FROM users
+	WHERE sub_until > 0 AND sub_until < ?;`
+
+	rows, err := t.tx.Query(query, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*models.User
+	for rows.Next() {
+		var u models.User
+		if err := rows.Scan(
+			&u.ID,
+			&u.TelegramID,
+			&u.UUID,
+			&u.Balance,
+			&u.Devices,
+			&u.SubUntil,
+			&u.ReferrerID,
+			&u.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		users = append(users, &u)
+	}
+	return users, rows.Err()
+}
+
+func (t *txRepo) GetAllUsers() ([]*models.User, error) {
+	query := `
+	SELECT id, telegram_id, uuid, balance, devices, sub_until, referrer_id, created_at
+	FROM users;`
+
+	rows, err := t.tx.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*models.User
+	for rows.Next() {
+		var u models.User
+		if err := rows.Scan(
+			&u.ID,
+			&u.TelegramID,
+			&u.UUID,
+			&u.Balance,
+			&u.Devices,
+			&u.SubUntil,
+			&u.ReferrerID,
+			&u.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		users = append(users, &u)
+	}
+	return users, rows.Err()
 }
 
 // RunInTx simply forwards the call to the provided function using the

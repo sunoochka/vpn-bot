@@ -16,6 +16,16 @@ import "vpn-bot/internal/models"
 type UserRepository interface {
 	CreateUser(user *models.User) error
 	GetUser(tgID int64) (*models.User, error)
+	UpdateUser(user *models.User) error
 	DeleteUser(tgID int64) error
+	
+	// ListExpired returns users whose SubUntil timestamp is in the past but
+	// still non-zero. It is used by the expiration checker.
+	ListExpired(now int64) ([]*models.User, error)
+
+	// GetAllUsers is a general-purpose iterator used by administrative
+	// routines; it may return a large slice when the user base grows.
+	GetAllUsers() ([]*models.User, error)
+
 	RunInTx(fn func(repo UserRepository) error) error
 }

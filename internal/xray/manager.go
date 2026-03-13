@@ -55,6 +55,9 @@ func (m *Manager) AddClient(uuid string) error {
 	if err != nil {
 		return err
 	}
+	if err := validateConfig(cfg); err != nil {
+		return err
+	}
 
 	updated := false
 	for i := range cfg.Inbounds {
@@ -95,6 +98,9 @@ func (m *Manager) AddClient(uuid string) error {
 func (m *Manager) RemoveClient(uuid string) error {
 	cfg, err := m.readConfig()
 	if err != nil {
+		return err
+	}
+	if err := validateConfig(cfg); err != nil {
 		return err
 	}
 
@@ -155,8 +161,12 @@ func (m *Manager) readConfig() (*Config, error) {
 
 // writeConfig marshals the configuration and atomically replaces the
 // on-disk file. An exclusive lock is held for the duration of the
-// write.
+// write. The configuration is validated before writing to catch
+// programmer errors early.
 func (m *Manager) writeConfig(cfg *Config) error {
+	if err := validateConfig(cfg); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -182,3 +192,18 @@ func (m *Manager) backupConfig() error {
 	return os.WriteFile(m.ConfigPath+".bak", data, XrayConfigPermissions)
 }
 
+// validateConfig performs a rudimentary check of the configuration
+// structure: it ensures that at least one vless inbound exists. This is
+// not a substitute for Xray's own configtest but helps avoid obvious
+// corruption during development.
+func validateConfig(cfg *Config) error {
+	if len(cfg.Inbounds) == 0 {
+		return errors.New("config contains no inbounds")
+	}
+	for _, in := range cfg.Inbounds {
+		if in.Tag == "vless" {
+			return nil
+		}
+	}
+	return errors.New("config contains no vless inbound")
+}
