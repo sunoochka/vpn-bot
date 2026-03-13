@@ -108,55 +108,14 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) {
 
 	msgOut := tgbotapi.NewMessage(msg.Chat.ID, text)
 	msgOut.ReplyMarkup = mainMenu()
-	b.api.Send(msgOut)
+	if _, err := b.api.Send(msgOut); err != nil {
+		log.Println("Ошибка отправки сообщения:", err)
+	}
 }
 
 func (b *Bot) handleProfile(msg *tgbotapi.Message) {
 	tgID := msg.From.ID
-
-	user, err := b.userSrv.GetUser(tgID)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	if user == nil {
-		b.reply(msg.Chat.ID, "Пользователь не найден. Пожалуйста, используйте /start для регистрации.")
-		return
-	}
-
-	var subText string
-	var days int
-
-	if user.SubUntil == 0 {
-		subText = "Нет активной подписки"
-	} else {
-		subTime := time.Unix(user.SubUntil, 0)
-		subText = subTime.Format("02.01.2006 15:04")
-		days = int(time.Until(subTime).Hours() / 24)
-		if days < 0 {
-			days = 0
-		}
-	}
-
-	key := vpn.GenerateKey(user.UUID, b.vpnConfig)
-
-	text := fmt.Sprintf(
-		"👤 Ваш профиль\n\n"+
-		"🆔Идентификатор: %d\n"+
-		"💰Баланс: %d ₽\n"+
-		"📲Устройств: %d\n\n"+
-		"📅Дата окончания:\n%v\n"+
-		"Осталось: %d дней\n\n"+
-		"🔑Ваш VPN ключ:\n%s",
-		user.TelegramID,
-		user.Balance,
-		user.Devices,
-		subText,
-		days+1,
-		key,
-	)
-	b.reply(msg.Chat.ID, text)
+	b.sendProfile(msg.Chat.ID, tgID, profileMenu(), 0)
 }
 
 func (b *Bot) handleUnknown(msg *tgbotapi.Message) {
@@ -174,42 +133,70 @@ func (b *Bot) reply(chatID int64, text string) {
 // ---- callback and payment-related helpers ----
 
 func (b *Bot) handleCallback(cb *tgbotapi.CallbackQuery) {
-	data := cb.Data
-	// answer to remove "loading" indicator
-	answer := tgbotapi.NewCallback(cb.ID, "")
-	if _, err := b.api.Request(answer); err != nil {
+	if cb == nil {
+		return
+	}
+
+	// answer to remove "loading" indicator (Telegram client needs it)
+	if _, err := b.api.Request(tgbotapi.NewCallback(cb.ID, "")); err != nil {
 		log.Println("failed to answer callback:", err)
 	}
 
-	switch data {
+	chatID := cb.From.ID
+	messageID := 0
+	if cb.Message != nil {
+		chatID = cb.Message.Chat.ID
+		messageID = cb.Message.MessageID
+	}
+
+	switch cb.Data {
 	case "menu:get_key":
-		b.sendVPNKey(cb.Message.Chat.ID, cb.From.ID)
+		b.sendVPNKey(chatID, cb.From.ID)
 	case "menu:profile":
-		b.sendProfile(cb.Message.Chat.ID, cb.From.ID, profileMenu())
+		b.sendProfile(chatID, cb.From.ID, profileMenu(), messageID)
 	case "menu:buy":
-		msg := tgbotapi.NewMessage(cb.Message.Chat.ID, "Выберите способ оплаты:")
-		msg.ReplyMarkup = buyMenu()
-		b.api.Send(msg)
+		buyMarkup := buyMenu()
+		b.editMessage(chatID, messageID, "Выберите способ оплаты:", &buyMarkup)
 	case "menu:help":
-		b.api.Send(tgbotapi.NewMessage(cb.Message.Chat.ID, "Доступные команды:\n/start\n/profile"))
+		b.editMessage(chatID, messageID, "Доступные команды:\n/start\n/profile", nil)
 	case "profile:show_key":
-		b.sendVPNKey(cb.Message.Chat.ID, cb.From.ID)
+		b.sendVPNKey(chatID, cb.From.ID)
 	case "profile:extend":
-		msg := tgbotapi.NewMessage(cb.Message.Chat.ID, "Выберите способ продления:")
-		msg.ReplyMarkup = buyMenu()
-		b.api.Send(msg)
+		extendMarkup := buyMenu()
+		b.editMessage(chatID, messageID, "Выберите способ продления:", &extendMarkup)
 	case "menu:main":
-		msg := tgbotapi.NewMessage(cb.Message.Chat.ID, "Главное меню")
-		msg.ReplyMarkup = mainMenu()
-		b.api.Send(msg)
+		mainMarkup := mainMenu()
+		b.editMessage(chatID, messageID, "Главное меню", &mainMarkup)
 	case "buy:card":
-		b.setPurchaseState(cb.Message.Chat.ID, "card")
-		b.api.Send(tgbotapi.NewMessage(cb.Message.Chat.ID, "Введите сумму в рублях для оплаты картой:"))
+		b.setPurchaseState(chatID, "card")
+		b.editMessage(chatID, messageID, "Введите сумму в рублях для оплаты картой:", nil)
 	case "buy:telegram":
-		b.setPurchaseState(cb.Message.Chat.ID, "telegram")
-		b.api.Send(tgbotapi.NewMessage(cb.Message.Chat.ID, "Введите сумму в рублях для оплаты через Telegram:"))
+		b.setPurchaseState(chatID, "telegram")
+		b.editMessage(chatID, messageID, "Введите сумму в рублях для оплаты через Telegram:", nil)
 	default:
 		// unknown callback ignored
+	}
+}
+
+func (b *Bot) editMessage(chatID int64, messageID int, text string, markup *tgbotapi.InlineKeyboardMarkup) {
+	if messageID == 0 {
+		// fallback to sending a new message if we don't have a message ID
+		b.sendMessage(chatID, text, markup)
+		return
+	}
+
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	edit.ReplyMarkup = markup
+	if _, err := b.api.Request(edit); err != nil {
+		log.Println("failed to edit message:", err)
+	}
+}
+
+func (b *Bot) sendMessage(chatID int64, text string, markup interface{}) {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = markup
+	if _, err := b.api.Send(msg); err != nil {
+		log.Println("Ошибка при отправке сообщения:", err)
 	}
 }
 
@@ -271,12 +258,13 @@ func (b *Bot) sendVPNKey(chatID int64, tgID int64) {
 	b.reply(chatID, "Ваш VPN ключ:\n"+key)
 }
 
-func (b *Bot) sendProfile(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardMarkup) {
+func (b *Bot) sendProfile(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardMarkup, messageID int) {
 	user, err := b.userSrv.GetUser(tgID)
 	if err != nil || user == nil {
 		b.reply(chatID, "Пользователь не найден.")
 		return
 	}
+
 	var subText string
 	var days int
 	if user.SubUntil == 0 {
@@ -289,15 +277,16 @@ func (b *Bot) sendProfile(chatID int64, tgID int64, markup tgbotapi.InlineKeyboa
 			days = 0
 		}
 	}
+
 	key := vpn.GenerateKey(user.UUID, b.vpnConfig)
 	text := fmt.Sprintf(
 		"👤 Ваш профиль\n\n"+
-		"🆔Идентификатор: %d\n"+
-		"💰Баланс: %d ₽\n"+
-		"📲Устройств: %d\n\n"+
-		"📅Дата окончания:\n%v\n"+
-		"Осталось: %d дней\n\n"+
-		"🔑Ваш VPN ключ:\n%s",
+			"🆔Идентификатор: %d\n"+
+			"💰Баланс: %d ₽\n"+
+			"📲Устройств: %d\n\n"+
+			"📅Дата окончания:\n%v\n"+
+			"Осталось: %d дней\n\n"+
+			"🔑Ваш VPN ключ:\n%s",
 		user.TelegramID,
 		user.Balance,
 		user.Devices,
@@ -305,9 +294,21 @@ func (b *Bot) sendProfile(chatID int64, tgID int64, markup tgbotapi.InlineKeyboa
 		days+1,
 		key,
 	)
-	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ReplyMarkup = markup
-	b.api.Send(msg)
+
+	if messageID == 0 {
+		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ReplyMarkup = markup
+		if _, err := b.api.Send(msg); err != nil {
+			log.Println("Ошибка отправки сообщения:", err)
+		}
+		return
+	}
+
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	edit.ReplyMarkup = &markup
+	if _, err := b.api.Request(edit); err != nil {
+		log.Println("failed to edit message:", err)
+	}
 }
 
 // utility keyboard builders
@@ -347,4 +348,3 @@ func buyMenu() tgbotapi.InlineKeyboardMarkup {
 		),
 	)
 }
-
