@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -54,113 +53,137 @@ func NewManager(configPath string) *Manager {
 // AddClient adds a new client entry to the first inbound with tag
 // "vless". If the UUID already exists the call is a no-op.
 func (m *Manager) AddClient(uuid string) error {
-	return m.modifyConfig(func(cfg *Config) (bool, error) {
-		updated := false
-		for i := range cfg.Inbounds {
-			in := &cfg.Inbounds[i]
-			if in.Tag != "vless" {
+
+	return m.modifyConfig(func(cfg map[string]interface{}) (bool, error) {
+
+		inbounds, ok := cfg["inbounds"].([]interface{})
+		if !ok {
+			return false, errors.New("invalid inbounds format")
+		}
+
+		for _, inbound := range inbounds {
+
+			in := inbound.(map[string]interface{})
+
+			if in["tag"] != "vless" {
 				continue
 			}
-			// search for duplicate
-			exists := false
-			for _, c := range in.Settings.Clients {
-				if c.ID == uuid {
-					exists = true
-					break
+
+			settings := in["settings"].(map[string]interface{})
+			clients := settings["clients"].([]interface{})
+
+			for _, c := range clients {
+
+				client := c.(map[string]interface{})
+
+				if client["id"] == uuid {
+					return false, nil
 				}
 			}
-			if exists {
-				return false, nil
+
+			newClient := map[string]interface{}{
+				"id":    uuid,
+				"flow":  "xtls-rprx-vision",
+				"email": uuid,
 			}
-			in.Settings.Clients = append(in.Settings.Clients, Client{ID: uuid, Flow: "xtls-rprx-vision", Email: uuid})
-			updated = true
-			break
+
+			settings["clients"] = append(clients, newClient)
+
+			return true, nil
 		}
-		if !updated {
-			return false, errors.New("no vless inbound found")
-		}
-		return true, nil
+
+		return false, errors.New("vless inbound not found")
 	})
 }
 
 // RemoveClient removes the specified UUID from the configuration; it is a
 // no-op if the UUID is not present.
 func (m *Manager) RemoveClient(uuid string) error {
-	return m.modifyConfig(func(cfg *Config) (bool, error) {
-		changed := false
-		for i := range cfg.Inbounds {
-			in := &cfg.Inbounds[i]
-			if in.Tag != "vless" {
+
+	return m.modifyConfig(func(cfg map[string]interface{}) (bool, error) {
+
+		inbounds := cfg["inbounds"].([]interface{})
+
+		for _, inbound := range inbounds {
+
+			in := inbound.(map[string]interface{})
+
+			if in["tag"] != "vless" {
 				continue
 			}
-			newClients := make([]Client, 0, len(in.Settings.Clients))
-			for _, c := range in.Settings.Clients {
-				if c.ID == uuid {
-					changed = true
+
+			settings := in["settings"].(map[string]interface{})
+			clients := settings["clients"].([]interface{})
+
+			newClients := []interface{}{}
+
+			for _, c := range clients {
+
+				client := c.(map[string]interface{})
+
+				if client["id"] == uuid {
 					continue
 				}
-				newClients = append(newClients, c)
+
+				newClients = append(newClients, client)
 			}
-			in.Settings.Clients = newClients
+
+			settings["clients"] = newClients
+
+			return true, nil
 		}
-		return changed, nil
+
+		return false, nil
 	})
 }
 
 // modifyConfig reads the current config under an exclusive lock, applies
 // the provided update function, and atomically writes the updated config.
 // If the update function returns (false, nil) the config is not written.
-func (m *Manager) modifyConfig(update func(cfg *Config) (bool, error)) error {
+func (m *Manager) modifyConfig(update func(map[string]interface{}) (bool, error)) error {
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	f, err := os.OpenFile(m.ConfigPath, os.O_RDWR, 0)
+	data, err := os.ReadFile(m.ConfigPath)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
-	// exclusive lock for the entire read-modify-write cycle.
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		return err
-	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	var cfg map[string]interface{}
 
-	var cfg Config
-	if err := json.NewDecoder(f).Decode(&cfg); err != nil {
-		return err
-	}
-	if err := validateConfig(&cfg); err != nil {
+	if err := json.Unmarshal(data, &cfg); err != nil {
 		return err
 	}
 
-	changed, err := update(&cfg)
+	changed, err := update(cfg)
 	if err != nil {
 		return err
 	}
+
 	if !changed {
 		return nil
 	}
 
-	// Backup before writing, so we can recover from failures.
 	if err := m.backupConfig(); err != nil {
 		return err
 	}
 
-	data, err := json.MarshalIndent(&cfg, "", "  ")
+	newData, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
 
 	tmp := m.ConfigPath + ".tmp"
-	if err := os.WriteFile(tmp, data, XrayConfigPermissions); err != nil {
+
+	if err := os.WriteFile(tmp, newData, XrayConfigPermissions); err != nil {
 		return err
 	}
 
-	// replace atomically
 	if err := os.Rename(tmp, m.ConfigPath); err != nil {
 		return err
 	}
+
 	return m.reloadXray()
 }
 
