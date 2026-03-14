@@ -1,49 +1,30 @@
 package bot
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
+
 	"vpn-bot/internal/service"
-	"vpn-bot/internal/vpn"
-	"vpn-bot/internal/xray"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 type Bot struct {
-	api       *tgbotapi.BotAPI
-	userSrv   *service.UserService
-	vpnConfig vpn.Config
-	// xray manager may still be kept for future admin commands but the
-	// service already handles adding users so handlers shouldn't call it
-	// directly.
-	xray xray.ManagerInterface
-
-	// simple in-memory state for users who are currently entering a
-	// payment amount. We key by chat ID and store the payment method
-	// requested ("card" or "telegram"). A mutex guards concurrent
-	// access since updates arrive on the bot goroutine.
-	purchaseState map[int64]string
-	psMu          sync.Mutex
+	api     *tgbotapi.BotAPI
+	userSrv *service.UserService
 }
 
-func New(token string, userSrv *service.UserService, vpnCfg vpn.Config, xrayMgr xray.ManagerInterface) (*Bot, error) {
+func New(token string, userSrv *service.UserService) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Bot{
-		api:           api,
-		userSrv:       userSrv,
-		vpnConfig:     vpnCfg,
-		xray:          xrayMgr,
-		purchaseState: make(map[int64]string),
-	}, nil
+	return &Bot{api: api, userSrv: userSrv}, nil
 }
 
 func (b *Bot) Start() {
@@ -79,8 +60,9 @@ func (b *Bot) Start() {
 
 func (b *Bot) handleStart(msg *tgbotapi.Message) {
 	tgID := msg.From.ID
+	ctx := context.Background()
 
-	user, isNew, err := b.userSrv.RegisterUser(tgID)
+	user, isNew, err := b.userSrv.RegisterUser(ctx, tgID)
 	if err != nil {
 		log.Println(err)
 		b.reply(msg.Chat.ID, "Ошибка при получении данных пользователя.")
@@ -93,7 +75,12 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) {
 		return
 	}
 
-	key := vpn.GenerateKey(user.UUID, b.vpnConfig)
+	key, err := b.userSrv.GenerateVPNKey(ctx, tgID)
+	if err != nil {
+		log.Println("failed to generate vpn key:", err)
+		b.reply(msg.Chat.ID, "Ошибка при получении VPN ключа.")
+		return
+	}
 
 	var text string
 
@@ -148,6 +135,7 @@ func (b *Bot) handleCallback(cb *tgbotapi.CallbackQuery) {
 		chatID = cb.Message.Chat.ID
 		messageID = cb.Message.MessageID
 	}
+	log.Printf("callback received: data=%q from=%d chat=%d msg=%d", cb.Data, cb.From.ID, chatID, messageID)
 
 	switch cb.Data {
 	case "menu:get_key":
@@ -168,13 +156,21 @@ func (b *Bot) handleCallback(cb *tgbotapi.CallbackQuery) {
 		mainMarkup := mainMenu()
 		b.editMessage(chatID, messageID, "Главное меню", &mainMarkup)
 	case "buy:card":
-		b.setPurchaseState(chatID, "card")
+		if err := b.userSrv.StartPayment(context.Background(), cb.From.ID, "card"); err != nil {
+			log.Println("failed to start payment flow:", err)
+			b.reply(chatID, "Не удалось начать оплату. Попробуйте позже.")
+			return
+		}
 		b.editMessage(chatID, messageID, "Введите сумму в рублях для оплаты картой:", nil)
 	case "buy:telegram":
-		b.setPurchaseState(chatID, "telegram")
+		if err := b.userSrv.StartPayment(context.Background(), cb.From.ID, "telegram"); err != nil {
+			log.Println("failed to start payment flow:", err)
+			b.reply(chatID, "Не удалось начать оплату. Попробуйте позже.")
+			return
+		}
 		b.editMessage(chatID, messageID, "Введите сумму в рублях для оплаты через Telegram:", nil)
 	default:
-		// unknown callback ignored
+		log.Printf("unknown callback data: %q", cb.Data)
 	}
 }
 
@@ -200,31 +196,21 @@ func (b *Bot) sendMessage(chatID int64, text string, markup interface{}) {
 	}
 }
 
-func (b *Bot) setPurchaseState(chatID int64, method string) {
-	b.psMu.Lock()
-	defer b.psMu.Unlock()
-	b.purchaseState[chatID] = method
-}
-
-func (b *Bot) clearPurchaseState(chatID int64) {
-	b.psMu.Lock()
-	defer b.psMu.Unlock()
-	delete(b.purchaseState, chatID)
-}
-
-func (b *Bot) getPurchaseState(chatID int64) (string, bool) {
-	b.psMu.Lock()
-	defer b.psMu.Unlock()
-	m, ok := b.purchaseState[chatID]
-	return m, ok
-}
-
 func (b *Bot) handlePendingPurchase(msg *tgbotapi.Message) bool {
-	_, ok := b.getPurchaseState(msg.Chat.ID)
-	if !ok {
+	// Preserve command handling even if a pending payment exists.
+	if msg.IsCommand() {
 		return false
 	}
-	b.clearPurchaseState(msg.Chat.ID)
+
+	ctx := context.Background()
+	pending, err := b.userSrv.GetPendingPayment(ctx, msg.From.ID)
+	if err != nil {
+		log.Println("failed to fetch pending payment:", err)
+		return false
+	}
+	if pending == nil {
+		return false
+	}
 
 	amount, err := strconv.Atoi(strings.TrimSpace(msg.Text))
 	if err != nil || amount <= 0 {
@@ -232,10 +218,10 @@ func (b *Bot) handlePendingPurchase(msg *tgbotapi.Message) bool {
 		return true
 	}
 
-	user, err := b.userSrv.ProcessPayment(msg.From.ID, amount)
+	user, err := b.userSrv.CompletePayment(ctx, msg.From.ID, amount)
 	if err != nil {
 		log.Println("payment processing error:", err)
-		b.reply(msg.Chat.ID, "Ошибка при обработке платежа.")
+		b.reply(msg.Chat.ID, "Ошибка при обработке платежа. Попробуйте позже.")
 		return true
 	}
 
@@ -249,17 +235,18 @@ func (b *Bot) handlePendingPurchase(msg *tgbotapi.Message) bool {
 }
 
 func (b *Bot) sendVPNKey(chatID int64, tgID int64) {
-	user, err := b.userSrv.GetUser(tgID)
-	if err != nil || user == nil {
+	ctx := context.Background()
+	key, err := b.userSrv.GenerateVPNKey(ctx, tgID)
+	if err != nil {
 		b.reply(chatID, "Пользователь не найден.")
 		return
 	}
-	key := vpn.GenerateKey(user.UUID, b.vpnConfig)
 	b.reply(chatID, "Ваш VPN ключ:\n"+key)
 }
 
 func (b *Bot) sendProfile(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardMarkup, messageID int) {
-	user, err := b.userSrv.GetUser(tgID)
+	ctx := context.Background()
+	user, err := b.userSrv.GetUser(ctx, tgID)
 	if err != nil || user == nil {
 		b.reply(chatID, "Пользователь не найден.")
 		return
@@ -278,7 +265,11 @@ func (b *Bot) sendProfile(chatID int64, tgID int64, markup tgbotapi.InlineKeyboa
 		}
 	}
 
-	key := vpn.GenerateKey(user.UUID, b.vpnConfig)
+	key, err := b.userSrv.GenerateVPNKey(ctx, tgID)
+	if err != nil {
+		b.reply(chatID, "Не удалось получить VPN ключ.")
+		return
+	}
 	text := fmt.Sprintf(
 		"👤 Ваш профиль\n\n"+
 			"🆔Идентификатор: %d\n"+

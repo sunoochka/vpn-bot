@@ -27,9 +27,18 @@ type Config struct {
 	// dependency injection.
 	XrayConfigPath string `yaml:"xray_config_path" env-required:"true"`
 
+	// path to the xray access log file for device tracking.
+	XrayAccessLogPath string `yaml:"xray_access_log_path" env-required:"false"`
+
 	// interval at which the background expiration checker runs. Accepts
 	// any duration string supported by time.ParseDuration (e.g. "5m").
 	ExpirationInterval string `yaml:"expiration_interval" env-default:"5m"`
+
+	// device tracking & limit enforcement settings
+	DeviceTTL string `yaml:"device_ttl" env-default:"24h"`
+	ReconnectWindow string `yaml:"reconnect_window" env-default:"60s"`
+	DeviceCacheFlushInterval string `yaml:"device_cache_flush_interval" env-default:"10s"`
+	DeviceCleanupInterval string `yaml:"device_cleanup_interval" env-default:"1h"`
 }
 
 func MustLoad() *Config {

@@ -16,4 +16,5 @@ type InboundSettings struct {
 type Client struct {
 	ID string `json:"id"`
 	Flow string `json:"flow"`
+	Email string `json:"email,omitempty"`
 }
