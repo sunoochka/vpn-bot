@@ -221,7 +221,7 @@ func (b *Bot) sendVPNKey(chatID int64, tgID int64, markup tgbotapi.InlineKeyboar
 	}
 
 	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
-	edit.ParseMode = tgbotapi.ModeMarkdownV2
+	edit.ParseMode = tgbotapi.ModeHTML
 	edit.ReplyMarkup = &markup
 	if _, err := b.api.Request(edit); err != nil {
 		log.Println("failed to edit message:", err)
