@@ -14,7 +14,7 @@ import (
 
 // XrayConfigPermissions defines the file mode used when writing the
 // configuration file. Only the owner should be able to read/write.
-const XrayConfigPermissions = 0o600
+const XrayConfigPermissions = 0o666
 
 // ManagerInterface specifies the operations the business layer requires
 // from any Xray configuration manager implementation. In production it
@@ -225,7 +225,7 @@ func validateConfig(cfg *Config) error {
 }
 
 func (*Manager) reloadXray() error {
-	cmd := exec.Command("systemctl", "--user", "reload", "xray")
+	cmd := exec.Command("sudo", "systemctl", "restart", "xray")
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to reload Xray: %w", err)

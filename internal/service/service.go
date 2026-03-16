@@ -73,14 +73,14 @@ func (s *UserService) GenerateVPNKey(ctx context.Context, tgID int64) (string, e
 
 // RegisterUser creates a new user and ensures the VPN configuration is
 // updated. If the user already exists, it is returned without modification.
-func (s *UserService) RegisterUser(ctx context.Context, tgID int64) (*domain.User, bool, error) {
+func (s *UserService) RegisterUser(ctx context.Context, tgID int64) (*domain.User, error) {
 	user, err := s.repo.GetUser(ctx, tgID)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 
 	if user != nil {
-		return user, false, nil
+		return user, nil
 	}
 
 	var createdUser *domain.User
@@ -125,7 +125,7 @@ func (s *UserService) RegisterUser(ctx context.Context, tgID int64) (*domain.Use
 	})
 
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 
 	// ВАЖНО: Xray вызываем ПОСЛЕ транзакции
@@ -134,7 +134,7 @@ func (s *UserService) RegisterUser(ctx context.Context, tgID int64) (*domain.Use
 		// компенсация
 		_ = s.repo.DeleteUser(ctx, tgID)
 
-		return nil, false, err
+		return nil, err
 	}
 
 	s.log.Info(
@@ -145,7 +145,7 @@ func (s *UserService) RegisterUser(ctx context.Context, tgID int64) (*domain.Use
 		},
 	)
 
-	return createdUser, true, nil
+	return createdUser, nil
 }
 
 // StartPayment registers a pending payment flow for the specified user.

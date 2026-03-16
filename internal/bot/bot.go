@@ -62,7 +62,7 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) {
 	tgID := msg.From.ID
 	ctx := context.Background()
 
-	user, isNew, err := b.userSrv.RegisterUser(ctx, tgID)
+	user, err := b.userSrv.RegisterUser(ctx, tgID)
 	if err != nil {
 		log.Println(err)
 		b.reply(msg.Chat.ID, "Ошибка при получении данных пользователя.")
@@ -75,22 +75,29 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) {
 		return
 	}
 
-	key, err := b.userSrv.GenerateVPNKey(ctx, tgID)
-	if err != nil {
-		log.Println("failed to generate vpn key:", err)
-		b.reply(msg.Chat.ID, "Ошибка при получении VPN ключа.")
-		return
-	}
+	// key, err := b.userSrv.GenerateVPNKey(ctx, tgID)
+	// if err != nil {
+	// 	log.Println("failed to generate vpn key:", err)
+	// 	b.reply(msg.Chat.ID, "Ошибка при получении VPN ключа.")
+	// 	return
+	// }
 
 	var text string
 
-	if isNew {
-		text = "🎉 Добро пожаловать!\n\n" +
-			"Вам выдано 3 дня бесплатного VPN.\n\n" +
-			"Ваш ключ:\n\n" + key
+	if user.Status == "active" {
+		subTime := time.Unix(user.SubUntil, 0)
+		subText := subTime.Format("02.01.2006 15:04")
+		text = fmt.Sprintf("🚀 SunaVPN\n\n"+
+			"Статус: ✅ Активна\n"+
+			"Действует до: %v\n\n"+
+			"Подключено устройств: %d / 5\n\n"+
+			"👇 Выберите действие",
+			subText,
+			user.Devices)
 	} else {
-		text = "👋 С возвращением!\n\n" +
-			"🔑 Ваш VPN ключ:\n\n" + key
+		text = "🚀 SunaVPN\n\n" +
+			"Статус: ❌ Не активна\n\n" +
+			"👇 Выберите действие"
 	}
 
 	msgOut := tgbotapi.NewMessage(msg.Chat.ID, text)
@@ -241,7 +248,12 @@ func (b *Bot) sendVPNKey(chatID int64, tgID int64) {
 		b.reply(chatID, "Пользователь не найден.")
 		return
 	}
-	b.reply(chatID, "Ваш VPN ключ:\n"+key)
+	text := fmt.Sprintf("🔑 Ваш VPN ключ:/n" + `%s` + "\n\n" +
+		"Рекомендуемое приложение: \n\n" +
+		"📱 iOS — Happ" +
+		"📱 Android — v2RayTun" +
+		"💻 ПК — Happ", key)
+	b.reply(chatID, text)
 }
 
 func (b *Bot) sendProfile(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardMarkup, messageID int) {
@@ -306,12 +318,12 @@ func (b *Bot) sendProfile(chatID int64, tgID int64, markup tgbotapi.InlineKeyboa
 func mainMenu() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Get VPN Key", "menu:get_key"),
-			tgbotapi.NewInlineKeyboardButtonData("Profile", "menu:profile"),
+			tgbotapi.NewInlineKeyboardButtonData("🔑 Получить ключ", "menu:get_key"),
+			tgbotapi.NewInlineKeyboardButtonData("💳 Пополнить", "menu:buy"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Buy Subscription", "menu:buy"),
-			tgbotapi.NewInlineKeyboardButtonData("Help", "menu:help"),
+			tgbotapi.NewInlineKeyboardButtonData("👤 Профиль", "menu:profile"),
+			tgbotapi.NewInlineKeyboardButtonData("❓ Помощь", "menu:help"),
 		),
 	)
 }
