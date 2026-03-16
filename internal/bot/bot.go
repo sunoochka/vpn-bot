@@ -339,34 +339,29 @@ func (b *Bot) sendInstruction(chatID int64, tgID int64, markup tgbotapi.InlineKe
 	var text string
 
 	text = "🚀 Добро пожаловать в SunaVPN\n\n" +
-
 		"Чтобы подключиться к VPN, выполните следующие шаги:\n\n" +
-
-		"1️⃣ **Скопируйте свой VPN ключ**\n" +
+		"1️⃣ <strong>Скопируйте свой VPN ключ</strong>\n" +
 		"- Нажмите на 🔁 'Обновить ключ' или просто скопируйте текст ключа.\n\n" +
-
-		"2️⃣ **Выберите приложение для подключения**\n" +
+		"2️⃣ <strong>Выберите приложение для подключения</strong>\n" +
 		"- 📱 iOS — Happ\n" +
 		"- 📱 Android — v2RayTun\n" +
 		"- 💻 ПК — Happ\n\n" +
-
-		"3️⃣ **Вставьте ключ в приложение**\n" +
+		"3️⃣ <strong>Вставьте ключ в приложение</strong>\n" +
 		"- В Happ или v2RayTun выберите 'Импорт из текста' и вставьте скопированный ключ.\n" +
 		"- В Happ для ПК выберите 'Добавить профиль' → 'Импорт из текста' и вставьте ключ.\n" +
 		"- Настройки по умолчанию уже подходят для подключения.\n\n" +
-
-		"4️⃣ **Подключитесь**\n" +
+		"4️⃣ <strong>Подключитесь</strong>\n" +
 		"- Нажмите 'Подключить' и убедитесь, что интернет работает через VPN.\n" +
 		"- Если соединение не устанавливается, попробуйте обновить ключ (🔑✨ Новый ключ).\n\n" +
-
-		"❗ **Совет:**\n" +
+		"❗ <strong>Совет:</strong>\n" +
 		"- Используйте ключ только на своих устройствах (максимум 5 устройств на один аккаунт).\n" +
 		"- Не передавайте ключ другим людям.\n\n" +
-		"💡 **Подсказка:** \n" +
+		"💡 <strong>Подсказка:</strong> \n" +
 		"- Если что-то пошло не так, вернитесь в главное меню (🔙 Назад) и попробуйте снова."
 
 	if messageID == 0 {
 		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ParseMode = tgbotapi.ModeHTML
 		msg.ReplyMarkup = markup
 		if _, err := b.api.Send(msg); err != nil {
 			log.Println("Ошибка отправки сообщения:", err)
@@ -375,6 +370,7 @@ func (b *Bot) sendInstruction(chatID int64, tgID int64, markup tgbotapi.InlineKe
 	}
 
 	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	edit.ParseMode = tgbotapi.ModeHTML
 	edit.ReplyMarkup = &markup
 	if _, err := b.api.Request(edit); err != nil {
 		log.Println("failed to edit message:", err)
