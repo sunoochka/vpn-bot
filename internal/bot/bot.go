@@ -362,6 +362,7 @@ func (b *Bot) sendMenu(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardM
 	}
 
 	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	edit.ParseMode = tgbotapi.ModeMarkdownV2
 	edit.ReplyMarkup = &markup
 	if _, err := b.api.Request(edit); err != nil {
 		log.Println("failed to edit message:", err)
