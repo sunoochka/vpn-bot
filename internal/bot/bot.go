@@ -60,51 +60,56 @@ func (b *Bot) Start() {
 
 func (b *Bot) handleStart(msg *tgbotapi.Message) {
 	tgID := msg.From.ID
-	ctx := context.Background()
+	b.sendMenu(msg.Chat.ID, tgID, profileMenu(), 0)
+}
 
-	user, err := b.userSrv.RegisterUser(ctx, tgID)
-	if err != nil {
-		log.Println(err)
-		b.reply(msg.Chat.ID, "Ошибка при получении данных пользователя.")
-		return
-	}
+// func (b *Bot) handleStart(msg *tgbotapi.Message) {
+// 	tgID := msg.From.ID
+// 	ctx := context.Background()
 
-	if user == nil {
-		log.Println("RegisterUser returned nil user")
-		b.reply(msg.Chat.ID, "Ошибка регистрации пользователя.")
-		return
-	}
+// 	user, err := b.userSrv.RegisterUser(ctx, tgID)
+// 	if err != nil {
+// 		log.Println(err)
+// 		b.reply(msg.Chat.ID, "Ошибка при получении данных пользователя.")
+// 		return
+// 	}
 
-	// key, err := b.userSrv.GenerateVPNKey(ctx, tgID)
-	// if err != nil {
-	// 	log.Println("failed to generate vpn key:", err)
-	// 	b.reply(msg.Chat.ID, "Ошибка при получении VPN ключа.")
-	// 	return
-	// }
+// 	if user == nil {
+// 		log.Println("RegisterUser returned nil user")
+// 		b.reply(msg.Chat.ID, "Ошибка регистрации пользователя.")
+// 		return
+// 	}
 
-	var text string
+// 	// key, err := b.userSrv.GenerateVPNKey(ctx, tgID)
+// 	// if err != nil {
+// 	// 	log.Println("failed to generate vpn key:", err)
+// 	// 	b.reply(msg.Chat.ID, "Ошибка при получении VPN ключа.")
+// 	// 	return
+// 	// }
 
-	if user.Status == "active" {
-		subTime := time.Unix(user.SubUntil, 0)
-		subText := subTime.Format("02.01.2006 15:04")
-		text = fmt.Sprintf("🚀 SunaVPN\n\n"+
-			"Статус: ✅ Активна\n"+
-			"Действует до: %v\n\n"+
-			"Подключено устройств: %d / 5\n\n"+
-			"👇 Выберите действие",
-			subText,
-			user.Devices)
-	} else {
-		text = "🚀 SunaVPN\n\n" +
-			"Статус: ❌ Не активна\n\n" +
-			"👇 Выберите действие"
-	}
+// 	var text string
 
-	msgOut := tgbotapi.NewMessage(msg.Chat.ID, text)
-	msgOut.ReplyMarkup = mainMenu()
-	if _, err := b.api.Send(msgOut); err != nil {
-		log.Println("Ошибка отправки сообщения:", err)
-	}
+// 	if user.Status == "active" {
+// 		subTime := time.Unix(user.SubUntil, 0)
+// 		subText := subTime.Format("02.01.2006 15:04")
+// 		text = fmt.Sprintf("🚀 SunaVPN\n\n"+
+// 			"Статус: ✅ Активна\n"+
+// 			"Действует до: %v\n\n"+
+// 			"Подключено устройств: %d / 5\n\n"+
+// 			"👇 Выберите действие",
+// 			subText,
+// 			user.Devices)
+// 	} else {
+// 		text = "🚀 SunaVPN\n\n" +
+// 			"Статус: ❌ Не активна\n\n" +
+// 			"👇 Выберите действие"
+// 	}
+
+// 	msgOut := tgbotapi.NewMessage(msg.Chat.ID, text)
+// 	msgOut.ReplyMarkup = mainMenu()
+// 	if _, err := b.api.Send(msgOut); err != nil {
+// 		log.Println("Ошибка отправки сообщения:", err)
+// 	}
 }
 
 func (b *Bot) handleProfile(msg *tgbotapi.Message) {
@@ -161,6 +166,8 @@ func (b *Bot) handleCallback(cb *tgbotapi.CallbackQuery) {
 		b.editMessage(chatID, messageID, "Выберите способ продления:", &extendMarkup)
 	case "menu:main":
 		b.sendMenu(chatID, cb.From.ID, mainMenu(), messageID)
+	case "key:help":
+		b.sendInstruction(chatID, cb.From.ID, instructionMenu(), messageID)
 	case "buy:card":
 		if err := b.userSrv.StartPayment(context.Background(), cb.From.ID, "card"); err != nil {
 			log.Println("failed to start payment flow:", err)
@@ -247,7 +254,7 @@ func (b *Bot) sendVPNKey(chatID int64, tgID int64, markup tgbotapi.InlineKeyboar
 		b.reply(chatID, "Пользователь не найден.")
 		return
 	}
-	text := fmt.Sprintf("🔑 Ваш VPN ключ:\n\n"+"`%s`"+"\n\n"+
+	text := fmt.Sprintf("🔑 Ваш VPN ключ (нажмите, чтобы скопировать):\n\n"+"`%s`"+"\n\n"+
 		"Рекомендуемое приложение: \n\n"+
 		"📱 iOS — Happ\n"+
 		"📱 Android — v2RayTun\n"+
@@ -370,16 +377,68 @@ func (b *Bot) sendMenu(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardM
 	}
 }
 
+func (b *Bot) sendInstruction(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardMarkup, messageID int) {
+	ctx := context.Background()
+	user, err := b.userSrv.GetUser(ctx, tgID)
+	if err != nil || user == nil {
+		b.reply(chatID, "Пользователь не найден.")
+		return
+	}
+
+	var text string
+
+	text = "🚀 Добро пожаловать в SunaVPN\n\n" +
+
+		"Чтобы подключиться к VPN, выполните следующие шаги:\n\n" +
+
+		"1️⃣ **Скопируйте свой VPN ключ**\n" +
+		"- Нажмите на 🔁 'Обновить ключ' или просто скопируйте текст ключа.\n\n" +
+
+		"2️⃣ **Выберите приложение для подключения**\n" +
+		"- 📱 iOS — Happ\n" +
+		"- 📱 Android — v2RayTun\n" +
+		"- 💻 ПК — Happ\n\n" +
+
+		"3️⃣ **Вставьте ключ в приложение**\n" +
+		"- В Happ или v2RayTun выберите 'Импорт из текста' и вставьте скопированный ключ.\n" +
+		"- В Happ для ПК выберите 'Добавить профиль' → 'Импорт из текста' и вставьте ключ.\n" +
+		"- Настройки по умолчанию уже подходят для подключения.\n\n" +
+
+		"4️⃣ **Подключитесь**\n" +
+		"- Нажмите 'Подключить' и убедитесь, что интернет работает через VPN.\n" +
+		"- Если соединение не устанавливается, попробуйте обновить ключ (🔑✨ Новый ключ).\n\n" +
+
+		"❗ **Совет:**\n" +
+		"- Используйте ключ только на своих устройствах (максимум 5 устройств на один аккаунт).\n" +
+		"- Не передавайте ключ другим людям.\n\n" +
+		"💡 **Подсказка:** \n" +
+		"- Если что-то пошло не так, вернитесь в главное меню (🔙 Назад) и попробуйте снова."
+
+	if messageID == 0 {
+		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ReplyMarkup = markup
+		if _, err := b.api.Send(msg); err != nil {
+			log.Println("Ошибка отправки сообщения:", err)
+		}
+		return
+	}
+
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	edit.ReplyMarkup = &markup
+	if _, err := b.api.Request(edit); err != nil {
+		log.Println("failed to edit message:", err)
+	}
+}
+
 // utility keyboard builders
 func mainMenu() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("👤 Профиль", "menu:profile"),
-			tgbotapi.NewInlineKeyboardButtonData("💳 Пополнить", "menu:buy"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("💳 Пополнить", "menu:buy"),
 			tgbotapi.NewInlineKeyboardButtonData("🔑 Получить ключ", "menu:get_key"),
-			tgbotapi.NewInlineKeyboardButtonData("❓ Помощь", "menu:help"),
 		),
 	)
 }
@@ -387,8 +446,23 @@ func mainMenu() tgbotapi.InlineKeyboardMarkup {
 func keyMenu() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Инструкция", "key:help"),
-			tgbotapi.NewInlineKeyboardButtonData("Назад", "menu:main"),
+			tgbotapi.NewInlineKeyboardButtonData("📖 Инструкция", "key:help"),
+			tgbotapi.NewInlineKeyboardButtonData("🔁 Обновить ключ", "menu:get_key"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🔙 Назад", "menu:main"),
+		),
+	)
+}
+
+func instructionMenu() tgbotapi.InlineKeyboardMarkup {
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🔁 Обновить ключ", "menu:get_key"),
+			tgbotapi.NewInlineKeyboardButtonData("🔙 Назад", "menu:get_key"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "menu:main"),
 		),
 	)
 }
