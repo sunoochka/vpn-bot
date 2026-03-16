@@ -354,6 +354,7 @@ func (b *Bot) sendMenu(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardM
 
 	if messageID == 0 {
 		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ParseMode = tgbotapi.ModeMarkdownV2
 		msg.ReplyMarkup = markup
 		if _, err := b.api.Send(msg); err != nil {
 			log.Println("Ошибка отправки сообщения:", err)
