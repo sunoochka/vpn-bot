@@ -205,14 +205,14 @@ func (b *Bot) sendVPNKey(chatID int64, tgID int64, markup tgbotapi.InlineKeyboar
 		b.reply(chatID, "Пользователь не найден.")
 		return
 	}
-	text := fmt.Sprintf("🔑 Ваш VPN ключ (нажмите, чтобы скопировать):\n\n"+"`%s`"+"\n\n"+
+	text := fmt.Sprintf("🔑 Ваш VPN ключ (нажмите, чтобы скопировать):\n\n"+"<code>%s</code>"+"\n\n"+
 		"Рекомендуемое приложение: \n\n"+
 		"📱 iOS — Happ\n"+
 		"📱 Android — v2RayTun\n"+
 		"💻 ПК — Happ", key)
 	if messageID == 0 {
 		msg := tgbotapi.NewMessage(chatID, text)
-		msg.ParseMode = tgbotapi.ModeMarkdownV2
+		msg.ParseMode = tgbotapi.ModeHTML
 		msg.ReplyMarkup = markup
 		if _, err := b.api.Send(msg); err != nil {
 			log.Println("Ошибка отправки сообщения:", err)
