@@ -110,7 +110,6 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) {
 // 	if _, err := b.api.Send(msgOut); err != nil {
 // 		log.Println("Ошибка отправки сообщения:", err)
 // 	}
-}
 
 func (b *Bot) handleProfile(msg *tgbotapi.Message) {
 	tgID := msg.From.ID
