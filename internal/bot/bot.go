@@ -160,8 +160,7 @@ func (b *Bot) handleCallback(cb *tgbotapi.CallbackQuery) {
 		extendMarkup := buyMenu()
 		b.editMessage(chatID, messageID, "Выберите способ продления:", &extendMarkup)
 	case "menu:main":
-		mainMarkup := mainMenu()
-		b.editMessage(chatID, messageID, "Главное меню", &mainMarkup)
+		b.sendMenu(chatID, cb.From.ID, mainMenu(), messageID)
 	case "buy:card":
 		if err := b.userSrv.StartPayment(context.Background(), cb.From.ID, "card"); err != nil {
 			log.Println("failed to start payment flow:", err)
@@ -310,6 +309,48 @@ func (b *Bot) sendProfile(chatID int64, tgID int64, markup tgbotapi.InlineKeyboa
 		days+1,
 		key,
 	)
+
+	if messageID == 0 {
+		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ReplyMarkup = markup
+		if _, err := b.api.Send(msg); err != nil {
+			log.Println("Ошибка отправки сообщения:", err)
+		}
+		return
+	}
+
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	edit.ReplyMarkup = &markup
+	if _, err := b.api.Request(edit); err != nil {
+		log.Println("failed to edit message:", err)
+	}
+}
+
+func (b *Bot) sendMenu(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardMarkup, messageID int) {
+	ctx := context.Background()
+	user, err := b.userSrv.GetUser(ctx, tgID)
+	if err != nil || user == nil {
+		b.reply(chatID, "Пользователь не найден.")
+		return
+	}
+
+	var text string
+
+	if user.Status == "active" {
+		subTime := time.Unix(user.SubUntil, 0)
+		subText := subTime.Format("02.01.2006 15:04")
+		text = fmt.Sprintf("🚀 SunaVPN\n\n"+
+			"Статус: ✅ Активна\n"+
+			"Действует до: %v\n\n"+
+			"Подключено устройств: %d / 5\n\n"+
+			"👇 Выберите действие",
+			subText,
+			user.Devices)
+	} else {
+		text = "🚀 SunaVPN\n\n" +
+			"Статус: ❌ Не активна\n\n" +
+			"👇 Выберите действие"
+	}
 
 	if messageID == 0 {
 		msg := tgbotapi.NewMessage(chatID, text)
