@@ -146,7 +146,7 @@ func (b *Bot) handleCallback(cb *tgbotapi.CallbackQuery) {
 
 	switch cb.Data {
 	case "menu:get_key":
-		b.sendVPNKey(chatID, cb.From.ID)
+		b.sendVPNKey(chatID, cb.From.ID, keyMenu(), messageID)
 	case "menu:profile":
 		b.sendProfile(chatID, cb.From.ID, profileMenu(), messageID)
 	case "menu:buy":
@@ -155,7 +155,7 @@ func (b *Bot) handleCallback(cb *tgbotapi.CallbackQuery) {
 	case "menu:help":
 		b.editMessage(chatID, messageID, "Доступные команды:\n/start\n/profile", nil)
 	case "profile:show_key":
-		b.sendVPNKey(chatID, cb.From.ID)
+		b.sendVPNKey(chatID, cb.From.ID, keyMenu(), messageID)
 	case "profile:extend":
 		extendMarkup := buyMenu()
 		b.editMessage(chatID, messageID, "Выберите способ продления:", &extendMarkup)
@@ -241,7 +241,7 @@ func (b *Bot) handlePendingPurchase(msg *tgbotapi.Message) bool {
 	return true
 }
 
-func (b *Bot) sendVPNKey(chatID int64, tgID int64) {
+func (b *Bot) sendVPNKey(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardMarkup, messageID int) {
 	ctx := context.Background()
 	key, err := b.userSrv.GenerateVPNKey(ctx, tgID)
 	if err != nil {
@@ -254,6 +254,20 @@ func (b *Bot) sendVPNKey(chatID int64, tgID int64) {
 		"📱 Android — v2RayTun" +
 		"💻 ПК — Happ", key)
 	b.reply(chatID, text)
+	if messageID == 0 {
+		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ReplyMarkup = markup
+		if _, err := b.api.Send(msg); err != nil {
+			log.Println("Ошибка отправки сообщения:", err)
+		}
+		return
+	}
+
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	edit.ReplyMarkup = &markup
+	if _, err := b.api.Request(edit); err != nil {
+		log.Println("failed to edit message:", err)
+	}
 }
 
 func (b *Bot) sendProfile(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardMarkup, messageID int) {

@@ -14,7 +14,7 @@ import (
 
 // XrayConfigPermissions defines the file mode used when writing the
 // configuration file. Only the owner should be able to read/write.
-const XrayConfigPermissions = 0o666
+const XrayConfigPermissions = 0o644
 
 // ManagerInterface specifies the operations the business layer requires
 // from any Xray configuration manager implementation. In production it
