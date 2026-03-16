@@ -110,8 +110,8 @@ func (b *Bot) handleCallback(cb *tgbotapi.CallbackQuery) {
 		b.editMessage(chatID, messageID, "Выберите способ оплаты:", &buyMarkup)
 	case "menu:help":
 		b.editMessage(chatID, messageID, "Доступные команды:\n/start\n/profile", nil)
-	case "profile:show_key":
-		b.sendVPNKey(chatID, cb.From.ID, keyMenu(), messageID)
+	case "menu:reset_key":
+		b.sendResetKey(chatID, cb.From.ID, keyMenu(), messageID)
 	case "profile:extend":
 		extendMarkup := buyMenu()
 		b.editMessage(chatID, messageID, "Выберите способ продления:", &extendMarkup)
@@ -206,6 +206,37 @@ func (b *Bot) sendVPNKey(chatID int64, tgID int64, markup tgbotapi.InlineKeyboar
 		return
 	}
 	text := fmt.Sprintf("🔑 Ваш VPN ключ (нажмите, чтобы скопировать):\n\n"+"<code>%s</code>"+"\n\n"+
+		"Рекомендуемое приложение: \n\n"+
+		"📱 iOS — Happ\n"+
+		"📱 Android — v2RayTun\n"+
+		"💻 ПК — Happ", key)
+	if messageID == 0 {
+		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ParseMode = tgbotapi.ModeHTML
+		msg.ReplyMarkup = markup
+		if _, err := b.api.Send(msg); err != nil {
+			log.Println("Ошибка отправки сообщения:", err)
+		}
+		return
+	}
+
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	edit.ParseMode = tgbotapi.ModeHTML
+	edit.ReplyMarkup = &markup
+	if _, err := b.api.Request(edit); err != nil {
+		log.Println("failed to edit message:", err)
+	}
+}
+
+func (b *Bot) sendResetKey(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardMarkup, messageID int) {
+	ctx := context.Background()
+	key, err := b.userSrv.GenerateVPNKey(ctx, tgID)
+	if err != nil {
+		b.reply(chatID, "Пользователь не найден.")
+		return
+	}
+	text := fmt.Sprintf("✅ VPN ключ успешно обновлен\n\n" +
+		"🔑 Ваш VPN ключ (нажмите, чтобы скопировать):\n\n"+"<code>%s</code>"+"\n\n"+
 		"Рекомендуемое приложение: \n\n"+
 		"📱 iOS — Happ\n"+
 		"📱 Android — v2RayTun\n"+
@@ -338,7 +369,7 @@ func (b *Bot) sendInstruction(chatID int64, tgID int64, markup tgbotapi.InlineKe
 
 	var text string
 
-	text = "🚀 Добро пожаловать в SunaVPN\n\n" +
+	text = "🚀 Добро пожаловать в <strong>SunaVPN</strong>\n\n" +
 		"Чтобы подключиться к VPN, выполните следующие шаги:\n\n" +
 		"1️⃣ <strong>Скопируйте свой VPN ключ</strong>\n" +
 		"- Нажмите на 🔁 'Обновить ключ' или просто скопируйте текст ключа.\n\n" +
@@ -355,9 +386,7 @@ func (b *Bot) sendInstruction(chatID int64, tgID int64, markup tgbotapi.InlineKe
 		"- Если соединение не устанавливается, попробуйте обновить ключ (🔑✨ Новый ключ).\n\n" +
 		"❗ <strong>Совет:</strong>\n" +
 		"- Используйте ключ только на своих устройствах (максимум 5 устройств на один аккаунт).\n" +
-		"- Не передавайте ключ другим людям.\n\n" +
-		"💡 <strong>Подсказка:</strong> \n" +
-		"- Если что-то пошло не так, вернитесь в главное меню (🔙 Назад) и попробуйте снова."
+		"- Не передавайте ключ другим людям.\n\n"
 
 	if messageID == 0 {
 		msg := tgbotapi.NewMessage(chatID, text)
@@ -394,7 +423,7 @@ func keyMenu() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("📖 Инструкция", "key:help"),
-			tgbotapi.NewInlineKeyboardButtonData("🔁 Обновить ключ", "menu:get_key"),
+			tgbotapi.NewInlineKeyboardButtonData("🔁 Обновить ключ", "menu:reset_key"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("🔙 Назад", "menu:main"),
@@ -405,7 +434,7 @@ func keyMenu() tgbotapi.InlineKeyboardMarkup {
 func instructionMenu() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🔁 Обновить ключ", "menu:get_key"),
+			tgbotapi.NewInlineKeyboardButtonData("🔁 Обновить ключ", "menu:reset_key"),
 			tgbotapi.NewInlineKeyboardButtonData("🔙 Назад", "menu:get_key"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
