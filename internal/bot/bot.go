@@ -328,6 +328,15 @@ func mainMenu() tgbotapi.InlineKeyboardMarkup {
 	)
 }
 
+func keyMenu() tgbotapi.InlineKeyboardMarkup {
+		return tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("Инструкция", "key:help"),
+				tgbotapi.NewInlineKeyboardButtonData("Назад", "menu:main"),
+			),
+		)
+}
+
 func profileMenu() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
