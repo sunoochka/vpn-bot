@@ -248,10 +248,10 @@ func (b *Bot) sendVPNKey(chatID int64, tgID int64, markup tgbotapi.InlineKeyboar
 		b.reply(chatID, "Пользователь не найден.")
 		return
 	}
-	text := fmt.Sprintf("🔑 Ваш VPN ключ:\n"+`%s`+"\n\n"+
+	text := fmt.Sprintf("🔑 Ваш VPN ключ:\n"+"`%s`"+"\n\n"+
 		"Рекомендуемое приложение: \n\n"+
-		"📱 iOS — Happ"+
-		"📱 Android — v2RayTun"+
+		"📱 iOS — Happ\n"+
+		"📱 Android — v2RayTun\n"+
 		"💻 ПК — Happ", key)
 	if messageID == 0 {
 		msg := tgbotapi.NewMessage(chatID, text)
@@ -331,11 +331,11 @@ func (b *Bot) sendProfile(chatID int64, tgID int64, markup tgbotapi.InlineKeyboa
 func mainMenu() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🔑 Получить ключ", "menu:get_key"),
+			tgbotapi.NewInlineKeyboardButtonData("👤 Профиль", "menu:profile"),
 			tgbotapi.NewInlineKeyboardButtonData("💳 Пополнить", "menu:buy"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("👤 Профиль", "menu:profile"),
+			tgbotapi.NewInlineKeyboardButtonData("🔑 Получить ключ", "menu:get_key"),
 			tgbotapi.NewInlineKeyboardButtonData("❓ Помощь", "menu:help"),
 		),
 	)
