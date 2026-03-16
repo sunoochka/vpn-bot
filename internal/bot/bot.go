@@ -247,13 +247,14 @@ func (b *Bot) sendVPNKey(chatID int64, tgID int64, markup tgbotapi.InlineKeyboar
 		b.reply(chatID, "Пользователь не найден.")
 		return
 	}
-	text := fmt.Sprintf("🔑 Ваш VPN ключ:\n"+"`%s`"+"\n\n"+
+	text := fmt.Sprintf("🔑 Ваш VPN ключ:\n\n"+"`%s`"+"\n\n"+
 		"Рекомендуемое приложение: \n\n"+
 		"📱 iOS — Happ\n"+
 		"📱 Android — v2RayTun\n"+
 		"💻 ПК — Happ", key)
 	if messageID == 0 {
 		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ParseMode = tgbotapi.ModeMarkdownV2
 		msg.ReplyMarkup = markup
 		if _, err := b.api.Send(msg); err != nil {
 			log.Println("Ошибка отправки сообщения:", err)
@@ -262,6 +263,7 @@ func (b *Bot) sendVPNKey(chatID int64, tgID int64, markup tgbotapi.InlineKeyboar
 	}
 
 	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	edit.ParseMode = tgbotapi.ModeMarkdownV2
 	edit.ReplyMarkup = &markup
 	if _, err := b.api.Request(edit); err != nil {
 		log.Println("failed to edit message:", err)
@@ -354,7 +356,6 @@ func (b *Bot) sendMenu(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardM
 
 	if messageID == 0 {
 		msg := tgbotapi.NewMessage(chatID, text)
-		msg.ParseMode = tgbotapi.ModeMarkdownV2
 		msg.ReplyMarkup = markup
 		if _, err := b.api.Send(msg); err != nil {
 			log.Println("Ошибка отправки сообщения:", err)
@@ -363,7 +364,6 @@ func (b *Bot) sendMenu(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardM
 	}
 
 	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
-	edit.ParseMode = tgbotapi.ModeMarkdownV2
 	edit.ReplyMarkup = &markup
 	if _, err := b.api.Request(edit); err != nil {
 		log.Println("failed to edit message:", err)
