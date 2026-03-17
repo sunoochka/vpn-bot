@@ -13,10 +13,8 @@ import (
 	"vpn-bot/internal/logging"
 )
 
-var (
-	// Example log line:
-	// 2026/03/13 12:41:21 91.22.33.44:52341 accepted tcp:www.google.com:443 [vless -> reality] email:user_uuid
-	logEntryRe = regexp.MustCompile(`^([0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})\s+([0-9.]+):(\d+)\b.*email:([A-Za-z0-9-]+)$`)
+var logEntryRe = regexp.MustCompile(
+	`^(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})(?:\.\d+)?\s+(?:from\s+)?([0-9.]+):(\d+).*email:\s*([a-f0-9-]+)`,
 )
 
 // LogParser tails an Xray access log and emits connection events.
@@ -129,7 +127,8 @@ func parseLogLine(line string) (ConnectionEvent, bool) {
 	if m == nil {
 		return ConnectionEvent{}, false
 	}
-	t, err := time.Parse("2006/01/02 15:04:05", m[1])
+	layout := "2006/01/02 15:04:05"
+	t, err := time.Parse(layout, m[1])
 	if err != nil {
 		return ConnectionEvent{}, false
 	}

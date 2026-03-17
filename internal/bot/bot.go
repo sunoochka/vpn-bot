@@ -280,29 +280,21 @@ func (b *Bot) sendProfile(chatID int64, tgID int64, markup tgbotapi.InlineKeyboa
 		}
 	}
 
-	key, err := b.userSrv.GenerateVPNKey(ctx, tgID)
-	if err != nil {
-		b.reply(chatID, "Не удалось получить VPN ключ.")
-		return
-	}
 	text := fmt.Sprintf(
-		"👤 Ваш профиль\n\n"+
-			"🆔Идентификатор: %d\n"+
-			"💰Баланс: %d ₽\n"+
-			"📲Устройств: %d\n\n"+
-			"📅Дата окончания:\n%v\n"+
-			"Осталось: %d дней\n\n"+
-			"🔑Ваш VPN ключ:\n%s",
+		"👤 <strong>Профиль</strong>\n\n"+
+			"🆔 <strong>Идентификатор</strong>: %d\n"+
+			"💰 <strong>Баланс</strong>: %d ₽\n"+
+			"📅 <strong>Дата окончания</strong>:\n%v\n"+
+			"Осталось: %d дней",
 		user.TelegramID,
 		user.Balance,
-		user.Devices,
 		subText,
 		days+1,
-		key,
 	)
 
 	if messageID == 0 {
 		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ParseMode = tgbotapi.ModeHTML
 		msg.ReplyMarkup = markup
 		if _, err := b.api.Send(msg); err != nil {
 			log.Println("Ошибка отправки сообщения:", err)
@@ -311,6 +303,7 @@ func (b *Bot) sendProfile(chatID int64, tgID int64, markup tgbotapi.InlineKeyboa
 	}
 
 	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	edit.ParseMode = tgbotapi.ModeHTML
 	edit.ReplyMarkup = &markup
 	if _, err := b.api.Request(edit); err != nil {
 		log.Println("failed to edit message:", err)
@@ -330,21 +323,22 @@ func (b *Bot) sendMenu(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardM
 	if user.Status == "active" {
 		subTime := time.Unix(user.SubUntil, 0)
 		subText := subTime.Format("02.01.2006 15:04")
-		text = fmt.Sprintf("🚀 SunaVPN\n\n"+
-			"Статус: ✅ Активна\n"+
-			"Действует до: %v\n\n"+
-			"Подключено устройств: %d / 5\n\n"+
+		text = fmt.Sprintf("🚀 <strong>SunaVPN</strong>\n\n"+
+			"<strong>Статус</strong>: ✅ Активна\n"+
+			"<strong>Действует до</strong>: %v\n\n"+
+			"<strong>Подключено устройств</strong>: %d / 5\n\n"+
 			"👇 Выберите действие",
 			subText,
 			user.Devices)
 	} else {
-		text = "🚀 SunaVPN\n\n" +
-			"Статус: ❌ Не активна\n\n" +
+		text = "🚀 <strong>SunaVPN</strong>\n\n" +
+			"<strong>Статус</strong>: ❌ Не активна\n\n" +
 			"👇 Выберите действие"
 	}
 
 	if messageID == 0 {
 		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ParseMode = tgbotapi.ModeHTML
 		msg.ReplyMarkup = markup
 		if _, err := b.api.Send(msg); err != nil {
 			log.Println("Ошибка отправки сообщения:", err)
@@ -353,6 +347,7 @@ func (b *Bot) sendMenu(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardM
 	}
 
 	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	edit.ParseMode = tgbotapi.ModeHTML
 	edit.ReplyMarkup = &markup
 	if _, err := b.api.Request(edit); err != nil {
 		log.Println("failed to edit message:", err)
@@ -413,7 +408,7 @@ func mainMenu() tgbotapi.InlineKeyboardMarkup {
 			tgbotapi.NewInlineKeyboardButtonData("👤 Профиль", "menu:profile"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("💳 Пополнить", "menu:buy"),
+			tgbotapi.NewInlineKeyboardButtonData("💰 Пополнить баланс", "menu:buy"),
 			tgbotapi.NewInlineKeyboardButtonData("🔑 Получить ключ", "menu:get_key"),
 		),
 	)
@@ -446,11 +441,11 @@ func instructionMenu() tgbotapi.InlineKeyboardMarkup {
 func profileMenu() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Show VPN Key", "profile:show_key"),
-			tgbotapi.NewInlineKeyboardButtonData("Extend Subscription", "profile:extend"),
+			tgbotapi.NewInlineKeyboardButtonData("🔑 Получить ключ", "menu:get_key"),
+			tgbotapi.NewInlineKeyboardButtonData("💰 Пополнить баланс", "profile:extend"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Back", "menu:main"),
+			tgbotapi.NewInlineKeyboardButtonData("🔙 Назад", "menu:main"),
 		),
 	)
 }

@@ -321,7 +321,7 @@ func (s *Storage) GetDeviceSession(ctx context.Context, userID int64, deviceHash
 	const op = "storage.sqlite.GetDeviceSession"
 
 	query := `
-	SELECT id, user_id, device_hash, ip, port_bucket first_seen, last_seen, connection_count, priority
+	SELECT id, user_id, device_hash, ip, port_bucket, first_seen, last_seen, connection_count, priority
 	FROM device_sessions
 	WHERE user_id = ? AND device_hash = ?;`
 
@@ -351,7 +351,7 @@ func (s *Storage) UpsertDeviceSession(ctx context.Context, ds *domain.DeviceSess
 	const op = "storage.sqlite.UpsertDeviceSession"
 
 	query := `
-	INSERT INTO device_sessions (user_id, device_hash, ip, first_seen, last_seen, connection_count, priority)
+	INSERT INTO device_sessions (user_id, device_hash, ip, port_bucket, first_seen, last_seen, connection_count, priority)
 	VALUES (?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(user_id, device_hash) DO UPDATE SET
 		ip = excluded.ip,
@@ -364,6 +364,7 @@ func (s *Storage) UpsertDeviceSession(ctx context.Context, ds *domain.DeviceSess
 		ds.UserID,
 		ds.DeviceHash,
 		ds.IP,
+		ds.PortBucket,
 		ds.FirstSeen,
 		ds.LastSeen,
 		ds.ConnectionCount,
