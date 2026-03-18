@@ -104,13 +104,5 @@ func main() {
 		}
 	}()
 
-	go func() {
-		ticker := time.NewTicker(10 * time.Minute)
-		for range ticker.C {
-			before := time.Now().Add(-30 * time.Minute).Unix()
-			_ = store.DeleteExpiredDeviceSessions(context.Background(), before)
-		}
-	}()
-
 	b.Start()
 }

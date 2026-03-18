@@ -79,7 +79,11 @@ func (t *DeviceTracker) Track(ctx context.Context, ev ConnectionEvent) {
 	if !t.cfg.Enabled {
 		return
 	}
-	go t.processEvent(ctx, ev)
+
+	select {
+	case t.events <- ev:
+	case <-ctx.Done():
+	}
 }
 
 // Enabled indicates whether the current configuration is set up to track devices.
@@ -97,8 +101,15 @@ func (t *DeviceTracker) getUserID(ctx context.Context, uuid string) (int64, erro
 	t.uuidMu.RUnlock()
 
 	user, err := t.repo.GetUserByUUID(ctx, uuid)
-	if err != nil || user == nil {
+	if err != nil {
 		return 0, err
+	}
+	if user == nil {
+		// Remove any stale cached mapping for this UUID.
+		t.uuidMu.Lock()
+		delete(t.uuidToUserID, uuid)
+		t.uuidMu.Unlock()
+		return 0, nil
 	}
 
 	t.uuidMu.Lock()
@@ -167,17 +178,22 @@ func (t *DeviceTracker) processEvent(ctx context.Context, ev ConnectionEvent) {
 		return
 	}
 
-	isNewDevice := !cacheOk
-	if isNewDevice {
-		// check db if the device already exists (in case cache missed it)
+	// Determine whether this session already exists in storage.
+	persisted := cacheOk && cacheSession.Persisted
+	if !persisted {
 		if existing, err := t.repo.GetDeviceSession(ctx, userID, baseHash); err == nil && existing != nil {
-			isNewDevice = false
 			cacheSession = existing
 			cacheOk = true
+			persisted = true
 		}
 	}
 
-	if isNewDevice && activeCount >= user.Devices {
+	isNewDevice := !persisted
+	if isNewDevice {
+		activeCount++
+	}
+
+	if activeCount > user.Devices {
 		oldest, err := t.repo.GetOldestActiveDeviceSession(ctx, userID, activeSince)
 		if err != nil {
 			t.log.Error("device_oldest_fetch_failed", "failed to fetch oldest device", map[string]interface{}{"error": err.Error(), "user_id": userID})
@@ -249,6 +265,8 @@ func (t *DeviceTracker) runCleanup(ctx context.Context) {
 			}
 			for _, s := range sessions {
 				t.log.Info("device_expired", "device session expired", map[string]interface{}{"user_id": s.UserID, "device_hash": s.DeviceHash, "ip": s.IP, "last_seen": s.LastSeen})
+				// Ensure cached sessions can't resurrect after cleanup.
+				t.cache.Delete(s.DeviceHash)
 			}
 			if err := t.repo.DeleteExpiredDeviceSessions(ctx, before); err != nil {
 				t.log.Error("device_cleanup_failed", "failed to delete expired devices", map[string]interface{}{"error": err.Error()})

@@ -13,4 +13,8 @@ type DeviceSession struct {
 	LastSeen        int64  `json:"last_seen"`
 	ConnectionCount int    `json:"connection_count"`
 	Priority        int64  `json:"priority"`
+	// Persisted indicates whether this session has been persisted into storage.
+	// This is used to avoid accidentally counting non-flushed sessions when
+	// enforcing device limits.
+	Persisted bool `json:"-"`
 }

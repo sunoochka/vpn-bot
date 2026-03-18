@@ -100,6 +100,8 @@ func (s *Storage) Init(ctx context.Context) error {
 		);`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_device_sessions_user_device ON device_sessions(user_id, device_hash);`,
 		`CREATE INDEX IF NOT EXISTS idx_device_sessions_user_id ON device_sessions(user_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_device_sessions_user_last_seen ON device_sessions(user_id, last_seen);`,
+		`CREATE INDEX IF NOT EXISTS idx_device_sessions_user_port_bucket_last_seen ON device_sessions(user_id, port_bucket, last_seen);`,
 		`CREATE INDEX IF NOT EXISTS idx_device_sessions_device_hash ON device_sessions(device_hash);`,
 		`CREATE INDEX IF NOT EXISTS idx_device_sessions_last_seen ON device_sessions(last_seen);`,
 	}
@@ -344,6 +346,7 @@ func (s *Storage) GetDeviceSession(ctx context.Context, userID int64, deviceHash
 		}
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
+	ds.Persisted = true
 	return &ds, nil
 }
 
@@ -352,11 +355,12 @@ func (s *Storage) UpsertDeviceSession(ctx context.Context, ds *domain.DeviceSess
 
 	query := `
 	INSERT INTO device_sessions (user_id, device_hash, ip, port_bucket, first_seen, last_seen, connection_count, priority)
-	VALUES (?, ?, ?, ?, ?, ?, ?)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(user_id, device_hash) DO UPDATE SET
 		ip = excluded.ip,
+		port_bucket = excluded.port_bucket,
 		last_seen = excluded.last_seen,
-		connection_count = device_sessions.connection_count + 1,
+		connection_count = device_sessions.connection_count + excluded.connection_count,
 		priority = excluded.priority;
 	`
 
@@ -426,6 +430,7 @@ func (s *Storage) GetOldestActiveDeviceSession(ctx context.Context, userID int64
 		}
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
+	ds.Persisted = true
 	return &ds, nil
 }
 
@@ -457,6 +462,7 @@ func (s *Storage) FindRecentSessionByPortBucket(ctx context.Context, userID int6
 		}
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
+	ds.Persisted = true
 	return &ds, nil
 }
 
@@ -490,6 +496,7 @@ func (s *Storage) ListExpiredDeviceSessions(ctx context.Context, before int64) (
 		); err != nil {
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
+		ds.Persisted = true
 		sessions = append(sessions, &ds)
 	}
 	if err := rows.Err(); err != nil {
@@ -1014,6 +1021,7 @@ func (t *txRepo) GetDeviceSession(ctx context.Context, userID int64, deviceHash 
 		}
 		return nil, err
 	}
+	ds.Persisted = true
 	return &ds, nil
 }
 
@@ -1083,6 +1091,7 @@ func (t *txRepo) FindRecentSessionByPortBucket(ctx context.Context, userID int64
 		}
 		return nil, err
 	}
+	ds.Persisted = true
 	return &ds, nil
 }
 
@@ -1114,6 +1123,7 @@ func (t *txRepo) ListExpiredDeviceSessions(ctx context.Context, before int64) ([
 		); err != nil {
 			return nil, err
 		}
+		ds.Persisted = true
 		sessions = append(sessions, &ds)
 	}
 	return sessions, rows.Err()

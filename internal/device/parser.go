@@ -14,7 +14,7 @@ import (
 )
 
 var logEntryRe = regexp.MustCompile(
-	`^(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})(?:\.\d+)?\s+(?:from\s+)?([0-9.]+):(\d+).*email:\s*([a-f0-9-]+)`,
+	`^(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})(?:\.\d+)?\s+(?:from\s+)?([0-9a-fA-F:.]+):(\d+).*email:\s*([a-f0-9-]+)`,
 )
 
 // LogParser tails an Xray access log and emits connection events.
@@ -78,6 +78,17 @@ func (p *LogParser) runOnce(ctx context.Context) error {
 		line, err := r.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
+				// Detect log rotation (inode change) and copytruncate (file shrunk).
+				pos, _ := f.Seek(0, io.SeekCurrent)
+				st, statErr := f.Stat()
+				if statErr == nil && st.Size() < pos {
+					// file truncated (copytruncate), rewind and continue
+					if _, seekErr := f.Seek(0, io.SeekStart); seekErr == nil {
+						r = bufio.NewReader(f)
+						continue
+					}
+				}
+
 				if rotated, newInode, reopenErr := p.checkRotation(inode); reopenErr == nil && rotated {
 					inode = newInode
 					f.Close()

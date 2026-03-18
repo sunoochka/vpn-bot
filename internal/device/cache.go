@@ -64,6 +64,14 @@ func (c *DeviceCache) Get(deviceHash string) (*domain.DeviceSession, bool) {
 	return cloneSession(v), true
 }
 
+// Delete removes a session from the cache (used when sessions expire or are evicted).
+func (c *DeviceCache) Delete(deviceHash string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.sessions, deviceHash)
+	delete(c.dirty, deviceHash)
+}
+
 // Run starts background flushing.
 func (c *DeviceCache) Run(ctx context.Context) {
 	ticker := time.NewTicker(c.interval)
@@ -86,16 +94,15 @@ func (c *DeviceCache) flush(ctx context.Context) {
 		c.mu.Unlock()
 		return
 	}
-	changed := make([]*domain.DeviceSession, 0, len(c.dirty))
+	changed := make(map[string]*domain.DeviceSession, len(c.dirty))
 	for k := range c.dirty {
 		if s, ok := c.sessions[k]; ok {
-			changed = append(changed, cloneSession(s))
+			changed[k] = cloneSession(s)
 		}
 	}
-	c.dirty = make(map[string]struct{})
 	c.mu.Unlock()
 
-	for _, s := range changed {
+	for k, s := range changed {
 		if err := c.repo.UpsertDeviceSession(ctx, s); err != nil {
 			c.logger.Error("device_cache_flush_failed", "failed to flush device session to storage", map[string]interface{}{"error": err.Error(), "device_hash": s.DeviceHash})
 			continue
@@ -104,9 +111,12 @@ func (c *DeviceCache) flush(ctx context.Context) {
 		// Reset the delta counter after a successful flush. The session record
 		// remains in cache for other fields (last_seen, ip, priority).
 		c.mu.Lock()
-		if existing, ok := c.sessions[s.DeviceHash]; ok {
+		if existing, ok := c.sessions[k]; ok {
 			existing.ConnectionCount = 0
+			existing.Persisted = true
 		}
+		// mark this session as clean (successfully persisted)
+		delete(c.dirty, k)
 		c.mu.Unlock()
 	}
 }
