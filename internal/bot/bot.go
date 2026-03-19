@@ -235,7 +235,7 @@ func (b *Bot) sendResetKey(chatID int64, tgID int64, markup tgbotapi.InlineKeybo
 		b.reply(chatID, "Пользователь не найден.")
 		return
 	}
-	text := fmt.Sprintf("✅ VPN ключ успешно обновлен\n\n" +
+	text := fmt.Sprintf("✅ VPN ключ успешно обновлен\n\n"+
 		"🔑 Ваш VPN ключ (нажмите, чтобы скопировать):\n\n"+"<code>%s</code>"+"\n\n"+
 		"Рекомендуемое приложение: \n\n"+
 		"📱 iOS — Happ\n"+
@@ -314,8 +314,11 @@ func (b *Bot) sendMenu(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardM
 	ctx := context.Background()
 	user, err := b.userSrv.GetUser(ctx, tgID)
 	if err != nil || user == nil {
-		b.reply(chatID, "Пользователь не найден.")
+		user, err = b.userSrv.RegisterUser(ctx, tgID)
+		if err != nil {
+			b.reply(chatID, "Ошибка регистрации пользователя.")
 		return
+		}
 	}
 
 	var text string
@@ -326,10 +329,8 @@ func (b *Bot) sendMenu(chatID int64, tgID int64, markup tgbotapi.InlineKeyboardM
 		text = fmt.Sprintf("🚀 <strong>SunaVPN</strong>\n\n"+
 			"<strong>Статус</strong>: ✅ Активна\n"+
 			"<strong>Действует до</strong>: %v\n\n"+
-			"<strong>Подключено устройств</strong>: %d / 5\n\n"+
 			"👇 Выберите действие",
-			subText,
-			user.Devices)
+			subText)
 	} else {
 		text = "🚀 <strong>SunaVPN</strong>\n\n" +
 			"<strong>Статус</strong>: ❌ Не активна\n\n" +
